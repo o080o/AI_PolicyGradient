@@ -1,4 +1,5 @@
 import gym
+import policygradient
 import tensorflow as tf
 env = gym.make('CartPole-v0')
 env.reset()
@@ -19,5 +20,6 @@ def rollout():
     print("rollout done.",payoff)
 
 PG = PolicyGradient(rollout, shape, env.action_space)
+
 for _ in range(100):
     PG.train()
