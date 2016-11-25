@@ -28,7 +28,7 @@ class PolicyGradient:
     def doAction(observation):
         #roll dice, then select based on our probability distribution
         probs = self.probability.eval({x: observation})
-        roll = np.random.choice( len(probs), dimensionality, p=probs)
+        roll = np.random.choice( len(probs), 1, p=probs)
         return roll
         
 
