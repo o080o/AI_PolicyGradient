@@ -1,10 +1,12 @@
 import numpy as np
+import tensorflow as tf
 
 class PolicyGradient:
 
     # rollout - function that does a rollout, given the policy network
     # size - the shape of the network for policy network (including the input and output layer)
     def __init__(self, rollout, size):
+        self.initWeightVal = 1
         self.rollout = rollout
         # create the nn for policy network
         lastLayer = -1
@@ -12,15 +14,16 @@ class PolicyGradient:
         for layer in size:
             y=0 # need to define outside of if-block
             if lastLayer >=0:
-                w = tf.Variable(tf.random.uniform([lastLayer, layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal))
-                w = tf.Variable(tf.random.uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal))
+                w = tf.Variable(tf.random_uniform([lastLayer, layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal))
+                b = tf.Variable(tf.random_uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal))
+                print(x_in, w)
                 y = tf.sigmoid(tf.matmul(x_in, w)+b)
             else:
                 y = tf.placeholder(tf.float32, [None, layer], name="x")
             lastLayer = layer
             x_in = y
         self.output = x_in
-        self.probability = output/tf.reduce_sum(self.output) # may need to change this.
+        self.probability = self.output/tf.reduce_sum(self.output) # may need to change this.
 
         learningRate = 0.1
         self.optimizer = tf.train.GradientDescentOptimizer(learningRate)
