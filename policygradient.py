@@ -13,7 +13,7 @@ class PolicyGradient:
             y=0 # need to define outside of if-block
             if lastLayer >=0:
                 w = tf.Variable(tf.random.uniform([lastLayer, layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal))
-                b = tf.Variable(tf.random_uniform
+                w = tf.Variable(tf.random.uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal))
                 y = tf.sigmoid(tf.matmul(x_in, w)+b)
             else:
                 y = tf.placeholder(tf.float32, [None, layer], name="x")
@@ -38,7 +38,7 @@ class PolicyGradient:
         deltaWeight = np.array()
         reference = self.rollout()
         for i in range(size):
-            deltaWeight[i] = ...
+            deltaWeight[i] = 0
             deltaReward[i] = self.rollout()-reference #this is the *increase* in reward
             updateWeights(deltaWeights)
         gradient = (deltaWeights*deltaWeights.transpose())^-1 * (deltaWeight*deltaReward.transpose())
