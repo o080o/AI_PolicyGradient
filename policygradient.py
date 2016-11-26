@@ -116,13 +116,13 @@ class PolicyGradient:
         deltaReward = np.zeros(shape=(size, 1))
         deltaWeight = np.zeros(shape=(size, nparameters))
 
-        reference = self.rollout(render=True)
+        reference = self.rollout(render=False)
         total = 0
         for i in range(size):
             delta = np.random.random(size=nparameters)*2*stepsize - stepsize
             deltaWeight[i] = referenceParameters + delta
             self.updateWeights(deltaWeight[i], parameters)
-            payoff = self.rollout(render=True)
+            payoff = self.rollout(render=False)
             total += payoff
             deltaReward[i][0] = payoff-reference #this is the *increase* in reward
             print("episode", i, "reward", payoff)
@@ -139,7 +139,8 @@ class PolicyGradient:
                 maxPayoff = deltaReward[i][0]
 
         if bestIteration >= 0: #aka, there was at least *one* better rollout than reference
-            self.updateWeights(deltaWeight[bestIteration], parameters) #return to base model for gradient update
+            self.updateWeights(deltaWeight[bestIteration], parameters) #update to better model
             print("best=", bestIteration)
         else:
+            self.updateWeights(referenceParameters, parameters) #restore base model
             print("no improvement")

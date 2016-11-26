@@ -28,6 +28,6 @@ policy.rollout = rollout
 
 for _ in range(100):
     #policy.finiteDifference(50, 1)
-    policy.greedySearch(15, 2)
+    policy.greedySearch(5, 1)
 
 input("enter to close")
