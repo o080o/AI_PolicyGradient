@@ -5,7 +5,7 @@ class PolicyGradient:
 
     # rollout - function that does a rollout, given the policy network
     # size - the shape of the network for policy network (including the input and output layer)
-    def __init__(self, rollout, size):
+    def __init__(self, rollout, size, learningRate=1):
         #self.sess = tf.Session()
         self.sess = tf.InteractiveSession()
 
@@ -28,7 +28,6 @@ class PolicyGradient:
         self.output = x_in
         self.probability = self.output/tf.reduce_sum(self.output) # may need to change this.
 
-        learningRate = 0.1
         self.optimizer = tf.train.GradientDescentOptimizer(learningRate)
 
         init = tf.initialize_all_variables().run()
@@ -38,33 +37,56 @@ class PolicyGradient:
         probs = self.probability.eval({self.input: observation.reshape(1,len(observation))})
         probs = probs.flatten()
         roll = np.random.choice( len(probs), 1, p=probs)
-        print(roll)
         return roll[0]
         
+
+    def reshapify(self,flatArray, parameters):
+        start = 0
+        reshaped = []
+        for variable in parameters:
+            length = np.multiply.reduce(variable.get_shape()) # the number of elements in this parameter
+            end = length + start
+            reshaped.append( np.array(flatArray[start:end], dtype=np.float32).reshape(variable.get_shape()) )
+            start=end
+        return reshaped
+
+
+
+    def updateWeights(self, newWeight, parameters):
+        weights = self.reshapify(newWeight, parameters)
+        for i in range(len(parameters)):
+            parameters[i].assign( weights[i] )
+
+    #def finiteDifference(self, size, stepsize):
 
     def train(self, size, stepsize):
         # implements finite difference approach
 
         #collect all weights in a flat array
         parameters = tf.trainable_variables()
-        print(parameters, parameters[0], parameters[1])
 
         referenceParameters = np.array([])
         for variable in parameters:
             referenceParameters = np.concatenate((referenceParameters, variable.eval().flatten()))
-        print(referenceParameters)
 
         nparameters = len(referenceParameters)
         deltaReward = np.zeros(shape=(size, 1))
         deltaWeight = np.zeros(shape=(size, nparameters))
 
         reference = self.rollout()
+        total = 0
         for i in range(size):
             delta = np.random.random(size=nparameters)
             deltaWeight[i] = referenceParameters + delta*stepsize
-            deltaReward[i][0] = self.rollout()-reference #this is the *increase* in reward
+            payoff = self.rollout()
+            total += payoff
+            deltaReward[i][0] = payoff-reference #this is the *increase* in reward
             #variable.assign(value)
-            #updateWeights(deltaWeights)
+            self.updateWeights(deltaWeight[i], parameters)
+        print(total)
+
+
+        self.updateWeights(referenceParameters, parameters) #return to base model for gradient update
 
         #A = np.matmul(deltaWeight.transpose(),deltaWeight)
         #A = np.linalg.inv(A)
@@ -74,7 +96,6 @@ class PolicyGradient:
         # = (dWeight^T * dWeight)^-1 * (dWeight^T * dReward)
         gradient = np.matmul(np.linalg.inv(np.matmul(deltaWeight.transpose(),deltaWeight)),  np.matmul(deltaWeight.transpose(),deltaReward))
         gradient = gradient.reshape((nparameters))
-        print("gradient shape", gradient.shape)
 
         #gradientsInput = np.zeros(shape=(nparameters))
         #gradientsInput = [0 for i in range(nparameters)]
@@ -85,18 +106,16 @@ class PolicyGradient:
         start = 0
 
         
-        apply_gradients = self.optimizer.apply_gradients(placeholder_gradients)
-        for variable in parameters:
-            print(variable)
-            print(variable.get_shape())
-            print( np.multiply.reduce(variable.get_shape() ))
-            length = np.multiply.reduce(variable.get_shape())
-            end = length + start
-            print(length)
-            print(gradient[i:length])
-            gradientsInput.append( (gradient[start:end], variable) )
-            start=end
-        print(gradientsInput)
+        shapedGradients = self.reshapify(gradient, parameters)
+        gradientsInput = zip(shapedGradients, parameters)
+        #gradientsInput = listything
+
+
+        #for variable in parameters:
+            #length = np.multiply.reduce(variable.get_shape())
+            #end = length + start
+            #gradientsInput.append( (np.array(gradient[start:end], dtype=np.float32).reshape(variable.get_shape()), variable) )
+            #start=end
 
         # and apply them!!
         self.optimizer.apply_gradients(gradientsInput)
