@@ -18,16 +18,17 @@ class PolicyGradient:
             y=0 # need to define outside of if-block
             if lastLayer >=0:
                 w = tf.Variable(tf.random_uniform([lastLayer, layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="W")
-                b = tf.Variable(tf.random_uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="B")
+                #b = tf.Variable(tf.random_uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="B")
                 #y = tf.sigmoid(tf.matmul(x_in, w)+b)
-                y = tf.matmul(x_in, w)+b
+                y = tf.matmul(x_in, w)
             else:
                 y = tf.placeholder(tf.float32, [None, layer], name="x")
                 self.input = y
             lastLayer = layer
             x_in = y
-        self.output = tf.sigmoid(x_in)
-        self.probability = self.output/tf.reduce_sum(self.output) # may need to change this.
+        #self.output = tf.sigmoid(x_in)
+        #self.probability = self.output/tf.reduce_sum(self.output) # may need to change this.
+        self.probability = x_in
 
         self.optimizer = tf.train.GradientDescentOptimizer(learningRate)
 
@@ -37,7 +38,12 @@ class PolicyGradient:
         #roll dice, then select based on our probability distribution
         probs = self.probability.eval({self.input: observation.reshape(1,len(observation))})
         probs = probs.flatten()
-        roll = np.random.choice( len(probs), 1, p=probs)
+        #roll = np.random.choice( len(probs+1), 1, p=probs)
+        if probs[0] > 0:
+            return 1
+        else:
+            return 0
+        print(probs, roll)
         return roll[0]
         
 
@@ -77,11 +83,10 @@ class PolicyGradient:
         for i in range(size):
             delta = np.random.random(size=nparameters)
             deltaWeight[i] = referenceParameters + delta
+            self.updateWeights(deltaWeight[i], parameters)
             payoff = self.rollout()
             total += payoff
             deltaReward[i][0] = payoff-reference #this is the *increase* in reward
-            #variable.assign(value)
-            self.updateWeights(deltaWeight[i], parameters)
         print(total/size, reference)
 
 
@@ -111,15 +116,17 @@ class PolicyGradient:
         deltaReward = np.zeros(shape=(size, 1))
         deltaWeight = np.zeros(shape=(size, nparameters))
 
-        reference = self.rollout()
+        reference = self.rollout(render=True)
         total = 0
         for i in range(size):
             delta = np.random.random(size=nparameters)*2*stepsize - stepsize
             deltaWeight[i] = referenceParameters + delta
-            payoff = self.rollout()
+            self.updateWeights(deltaWeight[i], parameters)
+            payoff = self.rollout(render=True)
             total += payoff
             deltaReward[i][0] = payoff-reference #this is the *increase* in reward
-            self.updateWeights(deltaWeight[i], parameters)
+            print("episode", i, "reward", payoff)
+
         print(total/size, reference)
 
 
@@ -133,5 +140,6 @@ class PolicyGradient:
 
         if bestIteration >= 0: #aka, there was at least *one* better rollout than reference
             self.updateWeights(deltaWeight[bestIteration], parameters) #return to base model for gradient update
+            print("best=", bestIteration)
         else:
             print("no improvement")

@@ -4,7 +4,7 @@ from policygradient import PolicyGradient
 env = gym.make('CartPole-v0')
 
 print(env.observation_space.shape)
-policy= PolicyGradient(None, [env.observation_space.shape[0], 10, env.action_space.n], learningRate=10)
+policy= PolicyGradient(None, [env.observation_space.shape[0], env.action_space.n-1], learningRate=10)
 
 def rollout(render=False):
     observation = env.reset()
@@ -27,7 +27,7 @@ def rollout(render=False):
 policy.rollout = rollout
 
 for _ in range(100):
-    policy.finiteDifference(50, 1)
-    #policy.greedySearch(5, .01)
+    #policy.finiteDifference(50, 1)
+    policy.greedySearch(15, 2)
 
 input("enter to close")
