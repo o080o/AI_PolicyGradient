@@ -55,11 +55,9 @@ class PolicyGradient:
     def updateWeights(self, newWeight, parameters):
         weights = self.reshapify(newWeight, parameters)
         for i in range(len(parameters)):
-            parameters[i].assign( weights[i] )
+            self.sess.run(parameters[i].assign( weights[i] ))
 
-    #def finiteDifference(self, size, stepsize):
-
-    def train(self, size, stepsize):
+    def finiteDifference(self, size, stepsize):
         # implements finite difference approach
 
         #collect all weights in a flat array
@@ -83,50 +81,54 @@ class PolicyGradient:
             deltaReward[i][0] = payoff-reference #this is the *increase* in reward
             #variable.assign(value)
             self.updateWeights(deltaWeight[i], parameters)
-        print(total)
+        print(total, reference)
+
 
 
         self.updateWeights(referenceParameters, parameters) #return to base model for gradient update
 
-        #A = np.matmul(deltaWeight.transpose(),deltaWeight)
-        #A = np.linalg.inv(A)
-        #B = np.matmul(deltaWeight.transpose(),deltaReward)
-        #gradient = np.matmul(A, B)
-
-        # = (dWeight^T * dWeight)^-1 * (dWeight^T * dReward)
         gradient = np.matmul(np.linalg.inv(np.matmul(deltaWeight.transpose(),deltaWeight)),  np.matmul(deltaWeight.transpose(),deltaReward))
         gradient = gradient.reshape((nparameters))
 
-        #gradientsInput = np.zeros(shape=(nparameters))
-        #gradientsInput = [0 for i in range(nparameters)]
-        #print("gi",gradientsInput)
-        gradientsInput = []
-
-        # now shape the gradients into a per-variable tensor.
-        start = 0
-
-        
         shapedGradients = self.reshapify(gradient, parameters)
         gradientsInput = zip(shapedGradients, parameters)
-        #gradientsInput = listything
-
-
-        #for variable in parameters:
-            #length = np.multiply.reduce(variable.get_shape())
-            #end = length + start
-            #gradientsInput.append( (np.array(gradient[start:end], dtype=np.float32).reshape(variable.get_shape()), variable) )
-            #start=end
-
         # and apply them!!
         self.optimizer.apply_gradients(gradientsInput)
 
-        # where each gradients[i] is a numpy array
-        #for i, grad_var in enumerate(compute_gradients):
+    def train(self, size, stepsize):
+        # implements finite difference approach
 
-            #feed_dict[placeholder_gradients[i][0]] = gradients[i]
-        #apply_gradients = optimizer.apply_gradients(placeholder_gradients)
-        #apply_gradient.run(feed_dict=d)
+        #collect all weights in a flat array
+        parameters = tf.trainable_variables()
 
-        #gradients = placeholder(tf.float32, [None, dim])
-        #optimizer.apply_gradients( zip(gradients, network_params))
+        referenceParameters = np.array([])
+        for variable in parameters:
+            referenceParameters = np.concatenate((referenceParameters, variable.eval().flatten()))
+        print(referenceParameters)
 
+        nparameters = len(referenceParameters)
+        deltaReward = np.zeros(shape=(size, 1))
+        deltaWeight = np.zeros(shape=(size, nparameters))
+
+        reference = self.rollout()
+        total = 0
+        for i in range(size):
+            delta = np.random.random(size=nparameters)
+            deltaWeight[i] = referenceParameters + delta*stepsize
+            payoff = self.rollout()
+            total += payoff
+            deltaReward[i][0] = payoff-reference #this is the *increase* in reward
+            #variable.assign(value)
+            self.updateWeights(deltaWeight[i], parameters)
+        print(total)
+
+
+        #select the best run, and go from there.
+        maxPayoff = 0
+        bestIteration = -1
+        for i in range(size):
+            if deltaReward[i][0] > maxPayoff:
+                bestIteration = i
+                maxPayoff = deltaReward[i][0]
+
+        self.updateWeights(deltaWeight[bestIteration], parameters) #return to base model for gradient update
