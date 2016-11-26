@@ -18,35 +18,45 @@ class PolicyGradient:
             y=0 # need to define outside of if-block
             if lastLayer >=0:
                 w = tf.Variable(tf.random_uniform([lastLayer, layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="W")
+                y = tf.matmul(x_in, w)
+                # uncomment to use bias AND weights. (doesn't seem necessary)
                 #b = tf.Variable(tf.random_uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="B")
                 #y = tf.sigmoid(tf.matmul(x_in, w)+b)
-                y = tf.matmul(x_in, w)
-            else:
+            else: # first layer, aka the input
                 y = tf.placeholder(tf.float32, [None, layer], name="x")
                 self.input = y
             lastLayer = layer
             x_in = y
-        #self.output = tf.sigmoid(x_in)
+        #self.output = tf.sigmoid(x_in) # clamp to 0-1 range
         #self.probability = self.output/tf.reduce_sum(self.output) # may need to change this.
-        self.probability = x_in
+        self.output = x_in
 
         self.optimizer = tf.train.GradientDescentOptimizer(learningRate)
-
         init = tf.initialize_all_variables().run()
 
-    def doAction(self,observation):
+    # given an observation return an action (this is *stochastic*, sampling
+    # from a distribution. this introduces a *lot* of variance on the reward
+    # for any given parameterization of the policy (the weights) )
+    def doStochasticAction(self, observation):
         #roll dice, then select based on our probability distribution
         probs = self.probability.eval({self.input: observation.reshape(1,len(observation))})
         probs = probs.flatten()
-        #roll = np.random.choice( len(probs+1), 1, p=probs)
-        if probs[0] > 0:
+        roll = np.random.choice( len(probs), 1, p=probs)
+        return roll[0]
+
+    # given an observation, returns an action (this is *deterministic*, aka not
+    # sampling from a distribution)
+    def doAction(self,observation):
+        output = self.output.eval({self.input: observation.reshape(1,len(observation))})
+        output = output.flatten()
+        if output[0] > 0:
             return 1
         else:
             return 0
-        print(probs, roll)
-        return roll[0]
-        
 
+    # reshapes a flat array back to the apropriate shapes for each parameter.
+    #   for instance, if the first parameter is 3x4, then the first 12 elements
+    #   in the flat array are reshaped into a 3x4 matrix, and so on.
     def reshapify(self,flatArray, parameters):
         start = 0
         reshaped = []
@@ -59,87 +69,96 @@ class PolicyGradient:
 
 
 
+    # updates the actual value of the weights in the network, given a flat list
+    # of parameters.
     def updateWeights(self, newWeight, parameters):
-        weights = self.reshapify(newWeight, parameters)
-        for i in range(len(parameters)):
-            self.sess.run(parameters[i].assign( weights[i] ))
+        weights = self.reshapify(newWeight, parameters) #reshape the flat list
+        for i in range(len(parameters)): # for every trainable variable,
+            self.sess.run(parameters[i].assign( weights[i] )) # assign its value.
 
+    # implement policy updates using the finite difference approach
     def finiteDifference(self, size, stepsize):
-        # implements finite difference approach
 
-        #collect all weights in a flat array
+        #get all the trainable variables
         parameters = tf.trainable_variables()
-
+        
+        #collect all weights in a flat array
         referenceParameters = np.array([])
-        for variable in parameters:
+        for variable in parameters: # for every variable, we get their parameters and flatten them, then concatenate to the flat array
             referenceParameters = np.concatenate((referenceParameters, variable.eval().flatten()))
 
         nparameters = len(referenceParameters)
-        deltaReward = np.zeros(shape=(size, 1))
-        deltaWeight = np.zeros(shape=(size, nparameters))
+        deltaReward = np.zeros(shape=(size, 1))             #this is the new rewards
+        deltaWeight = np.zeros(shape=(size, nparameters))   #this is the new weights
 
-        reference = self.rollout(render=True)
-        total = 0
+        reference = self.rollout(render=True)               # this is the baseline performance
+
+        # do several rollouts in order to calculate the gradient
+        total = 0 #used for logging
         for i in range(size):
-            delta = np.random.random(size=nparameters)
-            deltaWeight[i] = referenceParameters + delta
-            self.updateWeights(deltaWeight[i], parameters)
-            payoff = self.rollout()
-            total += payoff
-            deltaReward[i][0] = payoff-reference #this is the *increase* in reward
-        print(total/size, reference)
+            delta = np.random.random(size=nparameters)*2*stepsize - stepsize #calculate a random offset
+            newWeight = referenceParameters + delta         # calculate a new parameterization around the baseline
+            deltaWeight[i] = delta                          # save the delta for gradient calculation
+            self.updateWeights(deltaWeight[i], parameters)  # set the parameters in the NN
+            payoff = self.rollout()                         # and do a rollout/trajectory/episode
+            deltaReward[i][0] = payoff-reference            # calculate the increase in reward
+            total += payoff         
 
-
+        print(total/size, reference) #prints the average performance and the baseline for debugging
 
         self.updateWeights(referenceParameters, parameters) #return to base model for gradient update
 
+        # taken from paper: g = (dWeight^T * dWeight)^-1 (dWeight^T * dReward)
         gradient = np.matmul(np.linalg.inv(np.matmul(deltaWeight.transpose(),deltaWeight)),  np.matmul(deltaWeight.transpose(),deltaReward))
-        gradient = gradient.reshape((nparameters))
+        gradient = gradient.reshape((nparameters))  # reshape to flat list
 
-        shapedGradients = self.reshapify(gradient, parameters)
-        gradientsInput = zip(shapedGradients, parameters)
-        # and apply them!!
-        self.optimizer.apply_gradients(gradientsInput)
+        shapedGradients = self.reshapify(gradient, parameters)  #and reshape again!
+        gradientsInput = zip(shapedGradients, parameters)       # and finally zip with the variable list
+        self.optimizer.apply_gradients(gradientsInput)          # and finally apply them!
 
+    # rather than following gradients, this implements a greedy random walk of
+    # the parameter space, looking for better policy parameters (aka better
+    # weights)
+    # used as a baseline comparison
     def greedySearch(self, size, stepsize):
-        # implements finite difference approach
 
-        #collect all weights in a flat array
+        # get all the trainable variables
         parameters = tf.trainable_variables()
 
+        #collect all weights in a flat array
         referenceParameters = np.array([])
-        for variable in parameters:
+        for variable in parameters: # for every variable, we get their parameters and flatten them, then concatenate to the flat array
             referenceParameters = np.concatenate((referenceParameters, variable.eval().flatten()))
-        #print(referenceParameters)
 
         nparameters = len(referenceParameters)
-        deltaReward = np.zeros(shape=(size, 1))
-        deltaWeight = np.zeros(shape=(size, nparameters))
+        deltaReward = np.zeros(shape=(size, 1))             #this is the new rewards
+        newWeights = np.zeros(shape=(size, nparameters))   #this is the new weights
 
-        reference = self.rollout(render=False)
-        total = 0
+        reference = self.rollout(render=True)               # this is the baseline performance
+
+        # do several rollouts in order to calculate the gradient
+        total = 0 #used for logging
+        print("reference:", reference)
         for i in range(size):
-            delta = np.random.random(size=nparameters)*2*stepsize - stepsize
-            deltaWeight[i] = referenceParameters + delta
-            self.updateWeights(deltaWeight[i], parameters)
-            payoff = self.rollout(render=False)
+            delta = np.random.random(size=nparameters)*2*stepsize - stepsize    # calculate offset
+            newWeights[i] = referenceParameters + delta         # calculate a new parameterization around the baseline
+            self.updateWeights(newWeights[i], parameters)  # set the parameters in the NN
+            payoff = self.rollout()                         # and do a rollout/trajectory/episode
+            deltaReward[i][0] = payoff-reference            # calculate the increase in reward
             total += payoff
-            deltaReward[i][0] = payoff-reference #this is the *increase* in reward
             print("episode", i, "reward", payoff)
 
-        print(total/size, reference)
 
-
-        #select the best run, and go from there.
-        maxPayoff = 0
-        bestIteration = -1
-        for i in range(size):
-            if deltaReward[i][0] > maxPayoff:
+        #select the best run to use as the new policy parameters
+        maxPayoff = 0 #aka, no improvement. since all our rewards are stored as offsets, anything greater than 0 is an improvement
+        bestIteration = -1 # start with no best Iteration.
+        for i in range(size):                   # for every rollout,
+            if deltaReward[i][0] > maxPayoff:   #if it's an improvement over the best so far, select it
                 bestIteration = i
                 maxPayoff = deltaReward[i][0]
 
         if bestIteration >= 0: #aka, there was at least *one* better rollout than reference
-            self.updateWeights(deltaWeight[bestIteration], parameters) #update to better model
+            self.updateWeights(newWeights[bestIteration], parameters) #update to better model
             print("best=", bestIteration)
         else:
             self.updateWeights(referenceParameters, parameters) #restore base model
