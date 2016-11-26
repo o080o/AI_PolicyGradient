@@ -2,24 +2,28 @@ import gym
 import tensorflow as tf
 from policygradient import PolicyGradient
 env = gym.make('CartPole-v0')
-env.reset()
-
-payoff = 0
 
 print(env.observation_space.shape)
-policyNetwork = PolicyGradient(None, [env.observation_space.shape[0], env.action_space.n])
-for _ in range(1000):
+policy= PolicyGradient(None, [env.observation_space.shape[0], env.action_space.n])
 
-    env.render() # we can't render on CSX.
-    action = env.action_space.sample()
-    #action = 0
-    observation, reward, done, info = env.step(action)
-    print(action, observation, reward, done, info)
-    payoff += reward
-    if done:
-        payoff -= 100 #penalize "losing"
-        #break
+def rollout():
+    observation = env.reset()
+    payoff = 0
+    for _ in range(1000):
 
-print(payoff)
+        env.render() # we can't render on CSX.
+        action = env.action_space.sample()
+        #action = 0
+        action = policy.doAction(observation)
+        observation, reward, done, info = env.step(action)
+        print(action, observation, reward, done, info)
+        payoff += reward
+        if done:
+            payoff -= 100 #penalize "losing"
+            break
+    return payoff
+
+policy.rollout = rollout
+policy.train(3, .1)
 
 input("enter to close")
