@@ -19,13 +19,14 @@ class PolicyGradient:
             if lastLayer >=0:
                 w = tf.Variable(tf.random_uniform([lastLayer, layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="W")
                 b = tf.Variable(tf.random_uniform([layer], minval = -1*self.initWeightVal, maxval=self.initWeightVal), name="B")
-                y = tf.sigmoid(tf.matmul(x_in, w)+b)
+                #y = tf.sigmoid(tf.matmul(x_in, w)+b)
+                y = tf.matmul(x_in, w)+b
             else:
                 y = tf.placeholder(tf.float32, [None, layer], name="x")
                 self.input = y
             lastLayer = layer
             x_in = y
-        self.output = x_in
+        self.output = tf.sigmoid(x_in)
         self.probability = self.output/tf.reduce_sum(self.output) # may need to change this.
 
         self.optimizer = tf.train.GradientDescentOptimizer(learningRate)
@@ -71,17 +72,17 @@ class PolicyGradient:
         deltaReward = np.zeros(shape=(size, 1))
         deltaWeight = np.zeros(shape=(size, nparameters))
 
-        reference = self.rollout()
+        reference = self.rollout(render=True)
         total = 0
         for i in range(size):
             delta = np.random.random(size=nparameters)
-            deltaWeight[i] = referenceParameters + delta*stepsize
+            deltaWeight[i] = referenceParameters + delta
             payoff = self.rollout()
             total += payoff
             deltaReward[i][0] = payoff-reference #this is the *increase* in reward
             #variable.assign(value)
             self.updateWeights(deltaWeight[i], parameters)
-        print(total, reference)
+        print(total/size, reference)
 
 
 
@@ -95,7 +96,7 @@ class PolicyGradient:
         # and apply them!!
         self.optimizer.apply_gradients(gradientsInput)
 
-    def train(self, size, stepsize):
+    def greedySearch(self, size, stepsize):
         # implements finite difference approach
 
         #collect all weights in a flat array
@@ -104,7 +105,7 @@ class PolicyGradient:
         referenceParameters = np.array([])
         for variable in parameters:
             referenceParameters = np.concatenate((referenceParameters, variable.eval().flatten()))
-        print(referenceParameters)
+        #print(referenceParameters)
 
         nparameters = len(referenceParameters)
         deltaReward = np.zeros(shape=(size, 1))
@@ -113,14 +114,13 @@ class PolicyGradient:
         reference = self.rollout()
         total = 0
         for i in range(size):
-            delta = np.random.random(size=nparameters)
-            deltaWeight[i] = referenceParameters + delta*stepsize
+            delta = np.random.random(size=nparameters)*2*stepsize - stepsize
+            deltaWeight[i] = referenceParameters + delta
             payoff = self.rollout()
             total += payoff
             deltaReward[i][0] = payoff-reference #this is the *increase* in reward
-            #variable.assign(value)
             self.updateWeights(deltaWeight[i], parameters)
-        print(total)
+        print(total/size, reference)
 
 
         #select the best run, and go from there.
@@ -131,4 +131,7 @@ class PolicyGradient:
                 bestIteration = i
                 maxPayoff = deltaReward[i][0]
 
-        self.updateWeights(deltaWeight[bestIteration], parameters) #return to base model for gradient update
+        if bestIteration >= 0: #aka, there was at least *one* better rollout than reference
+            self.updateWeights(deltaWeight[bestIteration], parameters) #return to base model for gradient update
+        else:
+            print("no improvement")

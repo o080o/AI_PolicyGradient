@@ -4,14 +4,15 @@ from policygradient import PolicyGradient
 env = gym.make('CartPole-v0')
 
 print(env.observation_space.shape)
-policy= PolicyGradient(None, [env.observation_space.shape[0], env.action_space.n], learningRate=1)
+policy= PolicyGradient(None, [env.observation_space.shape[0], 10, env.action_space.n], learningRate=10)
 
-def rollout():
+def rollout(render=False):
     observation = env.reset()
     payoff = 0
     for _ in range(1000):
 
-        #env.render() # we can't render on CSX.
+        if render:
+            env.render() # we can't render on CSX.
         action = env.action_space.sample()
         #action = 0
         action = policy.doAction(observation)
@@ -26,6 +27,7 @@ def rollout():
 policy.rollout = rollout
 
 for _ in range(100):
-    policy.train(50, .5)
+    policy.finiteDifference(50, 1)
+    #policy.greedySearch(5, .01)
 
 input("enter to close")
