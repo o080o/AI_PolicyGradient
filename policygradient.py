@@ -76,6 +76,26 @@ class PolicyGradient:
         for i in range(len(parameters)): # for every trainable variable,
             self.sess.run(parameters[i].assign( weights[i] )) # assign its value.
 
+    # argblarg = Gradients w.r.t. parameters of log( policy(action | state))
+    def argblarg(state, action):
+        return phi(state, action) - E[phi(state, *)] # ????_??   ?_? WAT!? (http://home.deib.polimi.it/restelli/MyWebSite/pdf/rl7.pdf)
+
+    # grrrrr = Gradient  w.r.t parameters of log( pathProbability(path) )
+    def grrrrr(states, actions):
+        total = 0
+        for t in range( len(states) )
+            total += argblarg( states[t], actions[t] )
+        return total
+        
+    def likelihoodRatio(self, size, stepsize):
+        for k in range(size):
+            _, rewards, states, actions = rollout()
+            rollouts[k] = (rewards, states, actions)
+            gradient += argblarg(states, actions)*reward
+
+        gradient = gradient / size
+        
+
     # implement policy updates using the finite difference approach
     def finiteDifference(self, size, stepsize):
 
@@ -106,15 +126,18 @@ class PolicyGradient:
 
         print(total/size, reference) #prints the average performance and the baseline for debugging
 
+        print(referenceParameters)
         self.updateWeights(referenceParameters, parameters) #return to base model for gradient update
 
         # taken from paper: g = (dWeight^T * dWeight)^-1 (dWeight^T * dReward)
         gradient = np.matmul(np.linalg.inv(np.matmul(deltaWeight.transpose(),deltaWeight)),  np.matmul(deltaWeight.transpose(),deltaReward))
         gradient = gradient.reshape((nparameters))  # reshape to flat list
+        gradient = gradient * -1 #multiply everything by -1!!
+        print(gradient)
 
         shapedGradients = self.reshapify(gradient, parameters)  #and reshape again!
         gradientsInput = zip(shapedGradients, parameters)       # and finally zip with the variable list
-        self.optimizer.apply_gradients(gradientsInput)          # and finally apply them!
+        self.optimizer.apply_gradients(gradientsInput).run()          # and finally apply them!
 
     # rather than following gradients, this implements a greedy random walk of
     # the parameter space, looking for better policy parameters (aka better
